@@ -1,0 +1,1 @@
+For current version of implementation of data engineering, please see `data/readme.md` for clarification on unformatted data that would be ingested in `data/ClimateNormals.geojson`.

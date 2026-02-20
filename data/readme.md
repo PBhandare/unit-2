@@ -1,1 +1,1 @@
-Add data sources to the data folder
+Data is currently in comma separated value format and has twelve months of sequential data per file. Each file name is a weather station and the number series written between underscores are zip codes that have data associated to that zip code according to https://climatology.nelson.wisc.edu/wisconsin-historic-climate-data/climate-normals-by-location/. Currently, I am estimating the centroid location of the zip code boundary when searching it on Google Maps but I will adapt it to a more formal method.
