@@ -353,7 +353,7 @@ function updatePropSymbols(attribute){
     // update temporal legend fully
     var legendElem = document.querySelector("p.temporalLegend");
     if (legendElem) {
-        legendElem.textContent = climateMetadata.variables[currVar] + ' in ' + climateMetadata.months[attribute];
+        legendElem.textContent = getVariableDisplayName(currVar) + ' in ' + climateMetadata.months[attribute];
     }
 }
 
