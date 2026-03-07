@@ -19,6 +19,8 @@ function createMap(){
     getData(map);
 };
 
+var dataStats = {};
+
 function calcMinValue(data){
     //create empty array to store all data values
     var allValues = [];
@@ -33,7 +35,10 @@ function calcMinValue(data){
         }
     }
     //get minimum value of our array
-    var minValue = Math.min(...allValues)
+    var minValue = Math.min(...allValues);
+    dataStats.min = minValue;
+    dataStats.mean = allValues.reduce(function(a, b){return a + b})/allValues.length;
+    dataStats.max = Math.max(...allValues);
 
     return minValue;
 }
@@ -146,6 +151,126 @@ function createSequenceControls(attributes) {
     });
 };
 
+function adaptedSequenceControls(attributes) {
+    var SequenceControl = L.Control.extend({
+        options: {
+            position: 'bottomleft'
+        },
+
+        onAdd: function () {
+            // create the control container div with a particular class name
+            var container = L.DomUtil.create('div', 'sequence-control-container');
+
+            // ... initialize other DOM elements
+            container.insertAdjacentHTML('beforeend', '<input class="adapted-range-slider" type="range">')
+
+            //add skip buttons
+            container.insertAdjacentHTML('beforeend', '<button class="adapted-step" id="reverse" title="Reverse"><img src="img/arrow_right.svg"></button>'); 
+            container.insertAdjacentHTML('beforeend', '<button class="adapted-step" id="forward" title="Forward"><img src="img/arrow_right.svg"></button>');
+
+            //disable any mouse event listeners for the container
+            L.DomEvent.disableClickPropagation(container);
+
+            return container;
+        }
+    });
+
+    map.addControl(new SequenceControl());    // add listeners after adding control}
+
+    //set slider attributes
+    document.querySelector(".adapted-range-slider").max = 6;
+    document.querySelector(".adapted-range-slider").min = 0;
+    document.querySelector(".adapted-range-slider").value = 0;
+    document.querySelector(".adapted-range-slider").step = 1;
+
+    //Step 5: click listener for buttons
+    document.querySelectorAll('.adapted-step').forEach(function(step){
+        step.addEventListener("click", function(){
+            //sequence
+            var index = document.querySelector('.adapted-range-slider').value;
+
+            //Step 6: increment or decrement depending on button clicked
+            if (step.id == 'forward'){
+                index++;
+                //Step 7: if past the last attribute, wrap around to first attribute
+                index = index > 6 ? 0 : index;
+            } else if (step.id == 'reverse'){
+                index--;
+                //Step 7: if past the first attribute, wrap around to last attribute
+                index = index < 0 ? 6 : index;
+            };
+
+            //Step 8: update slider
+            document.querySelector('.adapted-range-slider').value = index;
+            console.log(index);
+
+            updatePropSymbols(attributes[index]);
+        })
+    })
+
+    //Step 5: input listener for slider
+    document.querySelector('.adapted-range-slider').addEventListener('input', function(){            
+        //sequence
+        //Step 6: get the new index value
+        var index = this.value;
+        console.log(index)
+
+        updatePropSymbols(attributes[index]);
+    });
+}
+
+function createLegend(attributes){
+    var LegendControl = L.Control.extend({
+        options: {
+            position: 'bottomright'
+        },
+
+        onAdd: function () {
+            // create the control container with a particular class name
+            var container = L.DomUtil.create('div', 'legend-control-container');
+
+            //PUT YOUR SCRIPT TO CREATE THE TEMPORAL LEGEND HERE
+
+            container.innerHTML = '<p class="temporalLegend">Population in <span class="year">1985</span></p>';
+
+            //Step 1: start attribute legend svg string
+            var svg = '<svg id="attribute-legend" width="160px" height="60px">';
+
+            //array of circle names to base loop on
+            var circles = ["max", "mean", "min"];
+
+            //Step 2: loop to add each circle and text to svg string
+            for (var i=0; i<circles.length; i++){
+                //Step 3: assign the r and cy attributes  
+                var radius = calcPropRadius(dataStats[circles[i]]);  
+                var cy = 59 - radius;  
+
+                //circle string
+                svg += '<circle class="legend-circle" id="' + circles[i] + '" r="' + radius + '"cy="' + cy + '" fill="#F47821" fill-opacity="0.8" stroke="#000000" cx="30"/>';
+                
+                //evenly space out labels            
+                var textY = i * 20 + 20;            
+
+                //text string            
+                svg += '<text id="' + circles[i] + '-text" x="65" y="' + textY + '">' + Math.round(dataStats[circles[i]]*100)/100 + " million" + '</text>';
+            };
+
+            //close svg string
+            svg += "</svg>";
+
+            //add attribute legend svg to container
+            //container.insertAdjacentHTML('beforeend',svg);
+
+            //add attribute legend svg to container
+            container.innerHTML += svg;
+
+            return container;
+        }
+    });
+
+    map.addControl(new LegendControl());
+};
+
 //Step 10: Resize proportional symbols according to new attribute values
 function updatePropSymbols(attribute){
     map.eachLayer(function(layer){
@@ -164,6 +289,9 @@ function updatePropSymbols(attribute){
             //add formatted attribute to panel content string
             var year = attribute.split("_")[1];
             popupContent += "<p><b>Population in " + year + ":</b> " + props[attribute] + " million</p>";
+            
+            //update temporal legend
+            document.querySelector("span.year").innerHTML = year;
 
             //update popup content            
             popup = layer.getPopup();            
@@ -219,7 +347,8 @@ function getData(){
             minValue = calcMinValue(json);
             //call function to create proportional symbols
             createPropSymbols(json, attributes);
-            createSequenceControls(attributes);
+            adaptedSequenceControls(attributes);
+            createLegend(attributes);
         })
 };
 

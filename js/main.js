@@ -8,16 +8,21 @@ var minValue;
 //store metadata globally
 var climateMetadata;
 
+var currVar = 3; // default: precip_in
+
+var legendContainer;  // will hold the Leaflet control div
+var geojsonData;      // store loaded GeoJSON globally
+
 //function to instantiate the Leaflet map
 function createMap(){
     //create the map
     map = L.map('map', {
-        center: [43.4, -87.9],
+        center: [43.719, -87.9],
         zoom: 9
     });
 
     //add OSM base tilelayer
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    L.tileLayer('https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
@@ -25,6 +30,7 @@ function createMap(){
     getData();
 };
 
+function PopupContent() {}
 
 //function to build HTML table from matrix
 function buildClimateTable(feature){
@@ -61,12 +67,28 @@ function buildClimateTable(feature){
     return html;
 };
 
+function createPopupContent(props, monthIndex) {
+    var zipCode = props.zip;
+    var climateVarName = getVariableDisplayName(currVar);
+    var unit = getUnitForVariable(currVar);
+    var currMonth = climateMetadata.months[monthIndex];
+    var varMonthVal = props.climate[monthIndex][currVar];
+
+    var popupContent = `
+        <p><b>Zip:</b> ${zipCode}</p>
+        <p><b>${climateVarName} in ${currMonth}:</b> ${varMonthVal} ${unit}</p>
+    `;
+
+    return popupContent;
+}
 
 //function to attach popup
 function onEachFeature(feature, layer){
     var popupContent = buildClimateTable(feature);
     layer.bindPopup(popupContent, { maxWidth: 600 });
 };
+
+var dataStats = {};
 
 function calcMinValue(data, variableIn){
     variable = climateMetadata.variables.indexOf(variableIn);
@@ -79,16 +101,19 @@ function calcMinValue(data, variableIn){
         for(var month = 0; month < climateMetadata.months.length; month += 1){
               //get population for current year
               var value = zip.properties.climate[month][variable];
-              console.log(value);
+              //console.log(value);
               // feature.properties.climate[month][variable]
               //add value to array
-              allValues.push(value);
+              if (value !== null && value !== 0) { allValues.push(value) }
         }
     }
     //get minimum value of our array
-    var minValue = Math.min(...allValues)
+    var minValue = Math.min(...allValues);
+    dataStats.min = minValue;
+    dataStats.mean = allValues.reduce(function(a, b){return a + b})/allValues.length;
+    dataStats.max = Math.max(...allValues);
 
-    console.log(minValue);
+    //console.log(minValue);
 
     return minValue;
 }
@@ -99,54 +124,51 @@ function calcPropRadius(attValue) {
     var minRadius = 5;
 
     //Flannery Appearance Compensation formula
-    var radius = 1.0083 * Math.pow(attValue/minValue, 0.5715) * minRadius
+    // 1.0083 correction factor used 
+    // for large numbers related to populations
+    var radius = Math.pow((attValue)/minValue, 0.5716) * minRadius
 
     return radius;
 };
 
 //function to convert markers to circle markers
 function pointToLayer(feature, latlng){
-    //Determine which attribute to visualize with proportional symbols
-    //var attribute = "Pop_2015";
+    var variable = currVar;
+    var month = 0; // Jan
 
-    variable = climateMetadata.variables.indexOf("precip_in");
-    //month = climateMetadata.months.indexOf(monthIn);
-    month = 0; //Jan
+    // get the attribute value
+    var attValue = Number(feature.properties.climate[month][variable]);
 
-    //create marker options
+    // create marker options
     var options = {
-        fillColor: "#ff7800",
+        fillColor: getCircleColor(currVar),
         color: "#000",
         weight: 1,
         opacity: 1,
         fillOpacity: 0.8
     };
 
-    //For each feature, determine its value for the selected attribute
-    //var attValue = Number(feature.properties[attribute]);
-    console.log(feature.properties.climate[month][variable]);
-    var attValue = Number(feature.properties.climate[month][variable]);
+    // only set radius if value is valid
+    if (attValue != null && attValue !== 0) {
+        options.radius = calcPropRadius(attValue);
+    } else {
+        // hide invalid values
+        options.radius = 0;
+        options.opacity = 0;
+        options.fillOpacity = 0;
+    }
 
-    //Give each feature's circle marker a radius based on its attribute value
-    options.radius = calcPropRadius(attValue);
-
-    //create circle marker layer
+    // create circle marker
     var layer = L.circleMarker(latlng, options);
 
-    //build popup content string
-    //var popupContent = "<p><b>City:</b> " + feature.properties.City + "</p><p><b>" + attribute + ":</b> " + feature.properties[attribute] + "</p>";
+    // bind popup only if value is valid
+    if (attValue != null && attValue !== 0) {
+        var popupContent = createPopupContent(feature.properties, month);
+        layer.bindPopup(popupContent);
+    }
 
-    // var popupContent = buildClimateTable(feature);
-    // layer.bindPopup(popupContent, { maxWidth: 600 });
-
-    var popupContent = "<p><b>Zip:</b> " + feature.properties.zip + "</p><p><b>" + climateMetadata.variables[3] + " in " + climateMetadata.months[0] + ":</b> " + feature.properties.climate[month][variable] + "</p>";
-
-    //bind the popup to the circle marker
-    layer.bindPopup(popupContent);
-
-    //return the circle marker to the L.geoJson pointToLayer option
     return layer;
-};
+}
 
 //Step 3: Add circle markers for point features to the map
 //Example 2.1 line 34...Add circle markers for point features to the map
@@ -158,38 +180,50 @@ function createPropSymbols(data, attributes){
         }
     }).addTo(map);
 };
-//Step 1: Create new sequence controls
-function createSequenceControls(attributes){
-    //create range input element (slider)
-    var slider = "<input class='range-slider' type='range'></input>";
-    document.querySelector("#panel").insertAdjacentHTML('beforeend',slider);
 
-        //set slider attributes
-    document.querySelector(".range-slider").max = 11;
-    document.querySelector(".range-slider").min = 0;
-    document.querySelector(".range-slider").value = 0;
-    document.querySelector(".range-slider").step = 1;
+function modifiedSequenceControls(attributes) {
+    var SequenceControl = L.Control.extend({
+        options: {
+            position: 'bottomright'
+        },
 
-    //below Example 3.6...add step buttons
-    document.querySelector('#panel').insertAdjacentHTML('beforeend','<button class="step" id="reverse"></button>');
-    document.querySelector('#panel').insertAdjacentHTML('beforeend','<button class="step" id="forward"></button>');
+        onAdd: function () {
+            // create the control container div with a particular class name
+            var container = L.DomUtil.create('div', 'sequence-control-container');
 
-    //replace button content with images
-    document.querySelector('#reverse').insertAdjacentHTML('beforeend',"<img src='img/arrow_right.svg'>");
-    document.querySelector('#forward').insertAdjacentHTML('beforeend',"<img src='img/arrow_right.svg'>");
+            // ... initialize other DOM elements
+            container.insertAdjacentHTML('beforeend', '<input class="adapted-range-slider" type="range">')
 
-        //Below Example 3.6 in createSequenceControls()
+            //add skip buttons
+            container.insertAdjacentHTML('beforeend', '<button class="adapted-step" id="reverse" title="Reverse"><img src="img/arrow_right.svg"></button>'); 
+            container.insertAdjacentHTML('beforeend', '<button class="adapted-step" id="forward" title="Forward"><img src="img/arrow_right.svg"></button>');
+
+            //disable any mouse event listeners for the container
+            L.DomEvent.disableClickPropagation(container);
+
+            return container;
+        }
+    });
+
+    map.addControl(new SequenceControl());    // add listeners after adding control}
+
+    //set slider attributes
+    document.querySelector(".adapted-range-slider").max = 11;
+    document.querySelector(".adapted-range-slider").min = 0;
+    document.querySelector(".adapted-range-slider").value = 0;
+    document.querySelector(".adapted-range-slider").step = 1;
+
     //Step 5: click listener for buttons
-    document.querySelectorAll('.step').forEach(function(step){
+    document.querySelectorAll('.adapted-step').forEach(function(step){
         step.addEventListener("click", function(){
             //sequence
-            var index = document.querySelector('.range-slider').value;
+            var index = document.querySelector('.adapted-range-slider').value;
 
             //Step 6: increment or decrement depending on button clicked
             if (step.id == 'forward'){
                 index++;
                 //Step 7: if past the last attribute, wrap around to first attribute
-                index = index > 11 ? 0 : index; // change to len of months metadata
+                index = index > 11 ? 0 : index;
             } else if (step.id == 'reverse'){
                 index--;
                 //Step 7: if past the first attribute, wrap around to last attribute
@@ -197,98 +231,240 @@ function createSequenceControls(attributes){
             };
 
             //Step 8: update slider
-            document.querySelector('.range-slider').value = index;
-            console.log(index);
+            document.querySelector('.adapted-range-slider').value = index;
+            //console.log(index);
 
-            //Step 9: pass new attribute to update symbols
             updatePropSymbols(climateMetadata.months.indexOf(attributes[index]));
         })
     })
 
     //Step 5: input listener for slider
-    document.querySelector('.range-slider').addEventListener('input', function(){            
+    document.querySelector('.adapted-range-slider').addEventListener('input', function(){            
         //sequence
         //Step 6: get the new index value
         var index = this.value;
-        console.log(index)
+        //console.log(index)
 
-        //Step 9: pass new attribute to update symbols
         updatePropSymbols(climateMetadata.months.indexOf(attributes[index]));
     });
-};
+}
 
-//Step 10: Resize proportional symbols according to new attribute values
+function createLegend() {
+    var LegendControl = L.Control.extend({
+        options: { position: 'bottomright' },
+        onAdd: function() {
+            legendContainer = L.DomUtil.create('div', 'legend-control-container');
+            L.DomEvent.disableClickPropagation(legendContainer); // stop map interactions
+            return legendContainer;
+        }
+    });
+
+    map.addControl(new LegendControl());
+}
+
+function updateLegend(monthIndex){
+    if (!legendContainer) return;
+
+    var defaultVar = climateMetadata.variables[currVar];
+    var defaultMonth = climateMetadata.months[monthIndex];
+
+    var circleNames = ["max","mean","min"];
+    var radii = circleNames.map(c => calcPropRadius(dataStats[c]));
+    var maxRadius = Math.max(...radii);
+
+    var paddingTop = 10;
+    var paddingBottom = 10;
+    var paddingSide = 10;
+    var textOffset = 65;
+
+    // SVG height: enough for largest circle + top and bottom padding
+    var svgHeight = maxRadius + maxRadius + paddingTop + paddingBottom;
+    var svgWidth = maxRadius + textOffset + paddingSide * 5;
+
+    // Bottom tips stacked
+    var bottomY = svgHeight - paddingBottom;
+
+    var variableName = getVariableDisplayName(currVar);
+
+    var html = `<p class="temporalLegend" style="padding-bottom:5px;">${variableName} in ${defaultMonth}</p>`;
+    html += `<svg id="attribute-legend" width="${svgWidth}px" height="${svgHeight + 15}px">`;
+
+    var unit = getUnitForVariable(currVar);
+
+    // define minimum vertical spacing between text labels
+    var minTextSpacing = 18;
+
+    // keep track of last text y to enforce spacing
+    var lastTextY = -30;
+
+    circleNames.forEach(function(c){
+        var radius = calcPropRadius(dataStats[c]);
+
+        // circle center y so bottom aligns at bottomY
+        var cy = bottomY - radius;
+        var cx = maxRadius + paddingSide;
+
+        var fillColor = getCircleColor(currVar);
+
+        html += `<circle class="legend-circle" id="${c}" r="${radius}" cx="${cx}" cy="${cy}" fill="${fillColor}" fill-opacity="0.8" stroke="#000"/>`;
+
+        // text y is circle center y, but ensure minimum spacing from previous text
+        var textY = Math.max(cy, lastTextY + minTextSpacing);
+
+        html += `<text x="${cx + textOffset - 15}" y="${textY - 15}" dominant-baseline="middle">${Math.round(dataStats[c]*100)/100} ${unit}</text>`;
+
+        lastTextY = textY;
+    });
+
+    html += '</svg>';
+
+    legendContainer.innerHTML = html;
+}
+
+//Resize proportional symbols according to new attribute values
 function updatePropSymbols(attribute){
     map.eachLayer(function(layer){
-        if (layer.feature && 
-            layer.feature.properties.climate[attribute][climateMetadata.variables.indexOf("precip_in")]) {
-            //update the layer style and popup
-            //access feature properties
-            var props = layer.feature.properties;
+        if (layer.feature) {
+            var val = layer.feature.properties.climate[attribute][currVar];
 
-            //update each feature's radius based on new attribute values
-            var radius = calcPropRadius(props.climate[attribute][climateMetadata.variables.indexOf("precip_in")]);
-            layer.setRadius(radius);
+            if (val != null && val !== 0) {
+                // show circle with radius
+                layer.setRadius(calcPropRadius(val));
+                layer.setStyle({
+                    opacity: 1,
+                    fillOpacity: 0.8,
+                    fillColor: getCircleColor(currVar)
+                });
+            } else {
+                // hide circle without destroying it
+                layer.setRadius(0);
+                layer.setStyle({opacity: 0, fillOpacity: 0});
+            }
 
-            //add city to popup content string
-            // var popupContent = "<p><b>City:</b> " + props.City + "</p>";
-
-            //add formatted attribute to panel content string
-            //var year = attribute.split("_")[1];
-            //popupContent += "<p><b>Population in " + year + ":</b> " + props[attribute] + " million</p>";
-
-            var popupContent = "<p><b>Zip:</b> " + props.zip + "</p><p><b>" + climateMetadata.variables[3] + " in " + climateMetadata.months[attribute] + ":</b> " + props.climate[attribute][climateMetadata.variables.indexOf("precip_in")] + "</p>";
-
-            //update popup content            
-            popup = layer.getPopup();            
-            popup.setContent(popupContent).update();
-        };
+            // update popup content only if value is valid
+            if (val != null && val !== 0) {
+                var popupContent = createPopupContent(layer.feature.properties, attribute);
+                var popup = layer.getPopup();
+                popup.setContent(popupContent).update();
+            }
+        }
     });
-};
 
-//Above Example 3.10...Step 3: build an attributes array from the data
-function processData(data, category){
-    //empty array to hold attributes
-    var attributes = [];
+    // update temporal legend fully
+    var legendElem = document.querySelector("p.temporalLegend");
+    if (legendElem) {
+        legendElem.textContent = climateMetadata.variables[currVar] + ' in ' + climateMetadata.months[attribute];
+    }
+}
 
-    //properties of the first feature in the dataset
-    // var properties = data.features[0].properties.climate[];
+function createVariableSelector() {
+    // select all radio buttons for climate variable
+    var radios = document.querySelectorAll('input[name="climateVar"]');
 
-    //push each attribute name into attributes array
-    // for (var attribute in properties){
-        //only take attributes with population values
-    //    if (attribute.indexOf("Pop") > -1){
-    //        attributes.push(attribute);
-    //    };
-    // };
+    radios.forEach(function(radio) {
+        radio.addEventListener("change", function() {
+            currVar = Number(this.value);
 
-    //check result
-    // console.log(attributes);
+            // Recalculate global stats for the new variable
+            minValue = calcMinValue(geojsonData, climateMetadata.variables[currVar]);
 
-    return attributes;
-};
+            // Get current slider month
+            var monthIndex = Number(document.querySelector('.adapted-range-slider').value);
+
+            // Update map symbols
+            updatePropSymbols(monthIndex);
+
+            // Update legend using global stats
+            updateLegend(monthIndex);
+        });
+    });
+}
+
+function setDefaultVariableRadio() {
+    var radios = document.querySelectorAll('input[name="climateVar"]');
+    radios.forEach(function(radio) {
+        if (Number(radio.value) === currVar) {
+            radio.checked = true; // select the default
+        }
+    });
+}
+
+function createVariableControl() {
+    var VariableControl = L.Control.extend({
+        options: { position: 'topright' },
+        onAdd: function(map) {
+            var container = L.DomUtil.create('div', 'variable-control-container');
+            L.DomEvent.disableClickPropagation(container); // prevents map panning
+
+            container.innerHTML = `
+                <form id="variable-form">
+                    <label><input type="radio" name="climateVar" value="0" checked> Average Temp</label><br>
+                    <label><input type="radio" name="climateVar" value="1"> Max Temp</label><br>
+                    <label><input type="radio" name="climateVar" value="2"> Min Temp</label><br>
+                    <label><input type="radio" name="climateVar" value="3"> Precipitation</label><br>
+                    <label><input type="radio" name="climateVar" value="4"> Snowfall</label>
+                </form>
+            `;
+            return container;
+        }
+    });
+
+    map.addControl(new VariableControl());
+}
+
+function getVariableDisplayName(variableIndex) {
+    switch(variableIndex) {
+        case 0: return "Average Temperature";
+        case 1: return "Maximum Temperature";
+        case 2: return "Minimum Temperature";
+        case 3: return "Precipitation";
+        case 4: return "Snowfall";
+        default: return "Unknown Variable";
+    }
+}
+
+function getUnitForVariable(variableIndex) {
+    switch (variableIndex) {
+        case 0: // Average Temp
+        case 1: // Max Temp
+        case 2: // Min Temp
+            return "°F";
+        case 3: // Precipitation
+        case 4: // Snowfall
+            return "in";
+        default:
+            return "";
+    }
+}
+
+function getCircleColor(variableIndex){
+    var varName = climateMetadata.variables[variableIndex].toLowerCase();
+
+    if(varName.includes("snow")) return "#ffffff";  // white for snow
+    if(varName.includes("precip")) return "#1f78b4"; // blue for precipitation
+    return "#F47821"; // default orange for temperature or others
+}
 
 //function to retrieve data
 function getData(){
-    //load the data
-    fetch("data/ClimateNormals.geojson")
-        .then(function(response){
-            return response.json();
-        })
-        .then(function(json){
+    fetch("data/DataEngineeredClimateNormals.geojson")
+        .then(response => response.json())
+        .then(json => {
+            geojsonData = json;          
             climateMetadata = json.metadata;
 
-            //var attributes = processData(json, "precip_in");
             var attributes = climateMetadata.months;
 
-            //calculate minimum data value
-            minValue = calcMinValue(json, "precip_in", "Jan");
+            minValue = calcMinValue(json, climateMetadata.variables[currVar]);
 
-            //call function to create proportional symbols
+            createVariableControl();
             createPropSymbols(json, attributes);
-
-            createSequenceControls(attributes);
-        })
+            modifiedSequenceControls(attributes);
+            createLegend();             
+            updateLegend(0);            
+            createVariableSelector();
+            setDefaultVariableRadio();
+        });
 };
 
 document.addEventListener('DOMContentLoaded', createMap);
