@@ -1413,7 +1413,7 @@
     {
       "type": "Feature",
       "properties": {
-        "zip": "53703",
+        "zip": "53073",
         "climate": [
           [
             null,
@@ -1504,8 +1504,8 @@
       "geometry": {
         "type": "Point",
         "coordinates": [
-          -89.38307717,
-          43.076748066
+          -87.98043731,
+          43.752265676
         ]
       }
     },

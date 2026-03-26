@@ -16,14 +16,26 @@ var geojsonData;      // store loaded GeoJSON globally
 //function to instantiate the Leaflet map
 function createMap(){
     //create the map
+
+    const center = [43.719, -87.9];
+    const offset = 0.5;
+
+    const bounds = L.latLngBounds(
+        [center[0] - offset, center[1] - offset], // southwest
+        [center[0] + offset, center[1] + offset]  // northeast
+    );
+
     map = L.map('map', {
-        center: [43.719, -87.9],
+        center: center,
+        maxBounds: bounds,
+        maxBoundsViscosity: 0.8,
         zoom: 9
     });
 
     //add OSM base tilelayer
-    L.tileLayer('https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors'
+    L.tileLayer.provider('Stadia.StamenTerrain', {
+        minZoom: 8,
+        maxZoom: 10
     }).addTo(map);
 
     //call getData function
@@ -95,16 +107,31 @@ function calcMinValue(data, variableIn){
 
     //create empty array to store all data values
     var allValues = [];
+
     //loop through each city
     for(var zip of data.features){
         //loop through each year
         for(var month = 0; month < climateMetadata.months.length; month += 1){
-              //get population for current year
-              var value = zip.properties.climate[month][variable];
-              //console.log(value);
-              // feature.properties.climate[month][variable]
-              //add value to array
-              if (value !== null && value !== 0) { allValues.push(value) }
+            //get population for current year
+            //console.log(value);
+            // feature.properties.climate[month][variable]
+            //add value to array
+            value = zip.properties.climate[month][variable];
+
+            if (value !== null && value !== 0 && variable === 4 && 
+                value >= 1) { // snow condition omits values less than one inch
+                allValues.push(value);
+            } else if ([0, 1, 2].includes(variable)) { // check if temperature variable
+                for (const i of [0, 1, 2]) { // get all temperature data
+                    value = zip.properties.climate[month][i]
+                    if (value !== null && value !== 0) {
+                        allValues.push(value);
+                    }
+                }
+            } else if (value !== null && value !== 0 && 
+                variable === 3) { // regular for precipitation data
+                allValues.push(value);
+            }
         }
     }
     //get minimum value of our array
@@ -121,10 +148,10 @@ function calcMinValue(data, variableIn){
 //calculate the radius of each proportional symbol
 function calcPropRadius(attValue) {
     //constant factor adjusts symbol sizes evenly
-    var minRadius = 5;
+    var minRadius = 6;
 
     //Flannery Appearance Compensation formula
-    // 1.0083 correction factor used 
+    // 1.0083 correction factor not used, but generally used
     // for large numbers related to populations
     var radius = Math.pow((attValue)/minValue, 0.5716) * minRadius
 
