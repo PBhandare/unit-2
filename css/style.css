@@ -6,19 +6,26 @@ body {
     font-family: sans-serif;
 }
 
-#map {    
-    height: 100vh;    
-    width: 70%;
+/* object of the storytelling */
+#map {
+    /* Small Viewport Height represents the viewport height 
+    with the address bar visible */
+    height: 100svh;  
+    width: 65%; /* split between panel */
 }
 
+/* area of page for storytelling */
 #panel {
     vertical-align: bottom;
-    width: 30%;
+    width: 35%; /* split between map */
+    height: 100svh;
     background-color: #22222220;
-    padding: 20px;
-    line-height: 1.75;
+    padding-left: 20px;
+    line-height: 1.75; /* minimize white space */
+    overflow-y: auto;
 }
 
+/* styling for the variable selector radio button list */
 .variable-control-container {
     background-color: rgba(255,255,255,0.8);
     padding: 10px;
@@ -32,6 +39,7 @@ body {
     margin-bottom: 4px;
 }
 
+/* styling for the month slider */
 .sequence-control-container {  
     width: 350px;  
     height: 30px;  
@@ -41,17 +49,6 @@ body {
     text-align: center;  
     border: solid gray 1px;
 }  
-
-.legend-control-container {
-    background-color: rgba(255,255,255,0.8);
-    border: 1px;
-    text-align: center;
-}
-
-.temporalLegend {
-    font-weight: bold;
-    padding: 10px 15px 5px 15px;
-}
 
 .step {  
     width: 10%;  
@@ -81,4 +78,16 @@ body {
 #reverse {  
     float: left;
     transform: scale(-1, 1);  
+}
+
+/* styling for the legend */
+.legend-control-container {
+    background-color: rgba(255,255,255,0.8);
+    border: 1px;
+    text-align: center;
+}
+
+.temporalLegend {
+    font-weight: bold;
+    padding: 10px 15px 5px 15px;
 }
